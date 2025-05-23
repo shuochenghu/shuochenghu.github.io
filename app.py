@@ -362,6 +362,9 @@ if stock_input:
                 if tech_stock in stock_data:
                     df = stock_data[tech_stock]["price_data"]
                     
+                    # Get correct currency based on selected market
+                    currency = t('currency_usd') if st.session_state['market'] == 'us' else t('currency_twd')
+                    
                     # Create figure for price and indicators
                     fig = make_subplots(
                         rows=2, 
@@ -369,7 +372,7 @@ if stock_input:
                         shared_xaxes=True,
                         vertical_spacing=0.1,
                         row_heights=[0.7, 0.3],
-                        subplot_titles=(f"{tech_stock} Price with Indicators", "Volume")
+                        subplot_titles=(t('price_with_indicators').format(tech_stock), t('volume'))
                     )
                     
                     # Add price candlestick
@@ -443,11 +446,14 @@ if stock_input:
                                 row=1, col=1
                             )
                     
+                    # Update layout with correct currency
+                    currency = t('currency_usd') if st.session_state['market'] == 'us' else t('currency_twd')
+                    
                     # Update layout
                     fig.update_layout(
-                        title=f"{tech_stock} Technical Analysis",
-                        xaxis_title="Date",
-                        yaxis_title="Price (USD)",
+                        title=f"{tech_stock} {t('tech_analysis')}",
+                        xaxis_title=t('date'),
+                        yaxis_title=t('price_currency').format(currency),
                         xaxis_rangeslider_visible=False,
                         height=700,
                         hovermode="x unified"
@@ -528,11 +534,11 @@ if stock_input:
             
             # TAB 4: RAW DATA
             with tabs[3]:
-                st.header("Raw Data")
+                st.header(t('raw_data'))
                 
                 # Stock selector for raw data
                 raw_stock = st.selectbox(
-                    "Select stock to view raw data",
+                    t('select_stock'),
                     list(stock_data.keys()),
                     key="raw_stock_select"
                 )
@@ -546,23 +552,23 @@ if stock_input:
                     # Download button for CSV
                     csv = df.to_csv().encode('utf-8')
                     st.download_button(
-                        label=f"Download {raw_stock} data as CSV",
+                        label=t('download').format(raw_stock),
                         data=csv,
                         file_name=f"{raw_stock}_stock_data.csv",
                         mime='text/csv',
                     )
                 
                 # Option to download all data
-                st.subheader("Download All Data")
+                st.subheader(t('download_data'))
                 
                 all_csv = all_data_df.to_csv().encode('utf-8')
                 st.download_button(
-                    label="Download All Stock Data as CSV",
+                    label=t('download_all'),
                     data=all_csv,
                     file_name="all_stock_data.csv",
                     mime='text/csv',
                 )
     else:
-        st.warning("Please enter at least one valid stock symbol.")
+        st.warning(t('valid_symbol'))
 else:
-    st.info("Enter stock symbols in the sidebar to get started.")
+    st.info(t('enter_to_start'))
