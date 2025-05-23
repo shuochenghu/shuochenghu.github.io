@@ -5,7 +5,15 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import yfinance as yf
 from datetime import datetime, timedelta
+import uuid
 from utils import calculate_technical_indicators, get_company_info, format_large_number
+from database import (
+    save_stock_data, get_cached_stock_data, 
+    save_user_preference, get_user_preference,
+    save_favorite_stock, remove_favorite_stock, get_favorite_stocks
+)
+from session_state import get_user_id
+from translations import get_translation
 
 # Page configuration
 st.set_page_config(
@@ -14,9 +22,23 @@ st.set_page_config(
     layout="wide"
 )
 
+# Get user ID for database operations
+user_id = get_user_id()
+
+# Get saved language preference or default to English
+default_language = get_user_preference(user_id, 'language', 'en')
+language_options = {
+    'English': 'en',
+    '繁體中文': 'zh-tw'
+}
+
+# Function to translate text based on current language
+def t(key):
+    return get_translation(key, language=current_language)
+
 # Application title
-st.title("📈 Stock Analysis Platform")
-st.markdown("Compare multiple stocks with charts, financial data, and technical indicators")
+st.title(t('app_title'))
+st.markdown(t('app_subtitle'))
 
 # Sidebar for inputs
 with st.sidebar:
