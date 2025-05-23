@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
 from plotly.subplots import make_subplots
 import yfinance as yf
 from datetime import datetime, timedelta
@@ -17,6 +18,7 @@ from simplified_database import (
 from session_state import get_user_id
 from translations import get_translation
 from simplified_prediction import SimpleStockPredictor
+from risk_assessment import PortfolioRiskAnalyzer
 
 # Page configuration
 st.set_page_config(
@@ -899,6 +901,84 @@ elif st.session_state['page'] == 'portfolio':
                         )
                         
                         st.plotly_chart(fig, use_container_width=True)
+                        
+                        # 添加风险评估部分
+                        st.subheader(t('risk_assessment'))
+                        risk_col1, risk_col2 = st.columns([1, 3])
+                        
+                        with risk_col1:
+                            st.write(t('analyze_portfolio_risk'))
+                            analyze_button = st.button(t('analyze_risk'))
+                            
+                            if analyze_button:
+                                st.session_state[f'analyze_risk_{viewing_portfolio}'] = True
+                                st.rerun()
+                        
+                        # 如果用户点击了风险分析按钮
+                        if st.session_state.get(f'analyze_risk_{viewing_portfolio}', False):
+                            with st.spinner(t('loading')):
+                                # 准备风险分析所需的数据
+                                symbols = [item['symbol'] for item in stock_data]
+                                weights = [item['market_value'] / total_value for item in stock_data]
+                                
+                                # 创建风险分析器并分析风险
+                                risk_analyzer = PortfolioRiskAnalyzer()
+                                risk_analysis = risk_analyzer.assess_portfolio_risk(symbols, weights, total_value)
+                                
+                                if 'error' in risk_analysis:
+                                    st.error(f"Error in risk analysis: {risk_analysis['error']}")
+                                else:
+                                    # 显示风险指标
+                                    st.subheader(t('risk_metrics'))
+                                    metrics_col1, metrics_col2, metrics_col3 = st.columns(3)
+                                    
+                                    with metrics_col1:
+                                        st.metric(
+                                            t('risk_level'), 
+                                            risk_analysis['risk_level']
+                                        )
+                                        st.metric(
+                                            t('volatility'), 
+                                            f"{risk_analysis['volatility']*100:.2f}%"
+                                        )
+                                    
+                                    with metrics_col2:
+                                        st.metric(
+                                            t('sharpe_ratio'), 
+                                            f"{risk_analysis['sharpe_ratio']:.2f}"
+                                        )
+                                        st.metric(
+                                            t('diversification'), 
+                                            f"{risk_analysis['diversification_score']*100:.2f}%"
+                                        )
+                                    
+                                    with metrics_col3:
+                                        st.metric(
+                                            t('value_at_risk'), 
+                                            f"{risk_analysis['var_95']*100:.2f}%"
+                                        )
+                                        st.metric(
+                                            t('potential_loss'), 
+                                            f"{currency_symbol}{risk_analysis['potential_loss_95']:.2f}"
+                                        )
+                                    
+                                    # 显示风险描述
+                                    st.markdown(f"**{t('risk_level')}**: {risk_analysis['risk_description']}")
+                                    st.markdown(f"**{t('risk_adjusted_return')}**: {risk_analysis['sharpe_description']}")
+                                    st.markdown(f"**{t('diversification')}**: {risk_analysis['diversification_recommendation']}")
+                                    
+                                    # 显示相关性热图
+                                    st.subheader(t('correlation_heatmap'))
+                                    st.plotly_chart(risk_analysis['correlation_heatmap'], use_container_width=True)
+                                    
+                                    # 显示风险回报散点图
+                                    st.subheader(t('risk_return_profile'))
+                                    st.plotly_chart(risk_analysis['risk_return_scatter'], use_container_width=True)
+                            
+                            # 添加关闭按钮
+                            if st.button(t('close')):
+                                st.session_state.pop(f'analyze_risk_{viewing_portfolio}', None)
+                                st.rerun()
                         
                         # 个别股票操作
                         st.subheader(t('stock_actions'))
