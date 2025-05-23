@@ -61,11 +61,33 @@ with st.sidebar:
         st.session_state['language'] = selected_language
         save_user_preference(user_id, 'language', selected_language)
         st.rerun()
+        
+    # Stock market selector
+    st.subheader(t('stock_market'))
+    if 'market' not in st.session_state:
+        st.session_state['market'] = 'us'  # Default to US market
+        
+    market_options = {
+        t('us_market'): 'us',
+        t('tw_market'): 'tw'
+    }
     
-    # Input for stock symbols
+    selected_market_name = st.radio(
+        t('market_selection'),
+        options=list(market_options.keys())
+    )
+    
+    # Update market if changed
+    selected_market = market_options[selected_market_name]
+    if selected_market != st.session_state['market']:
+        st.session_state['market'] = selected_market
+        save_user_preference(user_id, 'market', selected_market)
+    
+    # Input for stock symbols with market-specific defaults
+    default_symbols = "AAPL,MSFT,GOOGL" if st.session_state['market'] == 'us' else "2330.TW,3008.TW"
     stock_input = st.text_input(
         t('enter_symbols'),
-        value="AAPL,MSFT,GOOGL",
+        value=default_symbols,
         help=t('symbols_help')
     )
     
@@ -138,7 +160,7 @@ if stock_input:
     # Check for valid input
     if len(stocks) > 0:
         # Create tabs for different analysis views
-        tabs = st.tabs(["Price Comparison", "Financial Data", "Technical Analysis", "Raw Data"])
+        tabs = st.tabs([t('price_comparison'), t('financial_data'), t('tech_analysis'), t('raw_data')])
         
         # Dictionary to store data for each stock
         stock_data = {}
@@ -215,12 +237,15 @@ if stock_input:
                         )
                     )
                 
+                # Get correct currency based on selected market
+                currency = t('currency_usd') if st.session_state['market'] == 'us' else t('currency_twd')
+                
                 # Update layout
                 fig.update_layout(
-                    title="Stock Price Comparison",
-                    xaxis_title="Date",
-                    yaxis_title="Price (USD)",
-                    legend_title="Stocks",
+                    title=t('compare_stocks'),
+                    xaxis_title=t('date'),
+                    yaxis_title=t('price_currency').format(currency),
+                    legend_title=t('stocks'),
                     height=600,
                     hovermode="x unified"
                 )
@@ -265,10 +290,10 @@ if stock_input:
                 
                 # Update layout
                 fig_pct.update_layout(
-                    title="Percentage Change Since Start of Period",
-                    xaxis_title="Date",
-                    yaxis_title="Change (%)",
-                    legend_title="Stocks",
+                    title=t('pct_change_period'),
+                    xaxis_title=t('date'),
+                    yaxis_title=t('pct_change'),
+                    legend_title=t('stocks'),
                     height=400,
                     hovermode="x unified"
                 )
@@ -277,7 +302,7 @@ if stock_input:
             
             # TAB 2: FINANCIAL DATA
             with tabs[1]:
-                st.header("Financial Data Comparison")
+                st.header(t('financial_comparison'))
                 
                 # Create a comparison table
                 comparison_data = {}
@@ -309,9 +334,12 @@ if stock_input:
                             change = stock_data[stock]["price_data"]["Close"].iloc[-1] - stock_data[stock]["price_data"]["Close"].iloc[-2]
                             pct_change = (change / stock_data[stock]["price_data"]["Close"].iloc[-2]) * 100
                             
+                            # Display with correct currency symbol based on market
+                            currency_symbol = "$" if st.session_state['market'] == 'us' else "NT$"
+                            
                             price_color = "green" if change >= 0 else "red"
-                            st.markdown(f"**Current Price:** ${current_price:.2f}")
-                            st.markdown(f"**Change:** <span style='color:{price_color}'>{change:.2f} ({pct_change:.2f}%)</span>", unsafe_allow_html=True)
+                            st.markdown(f"**{t('current_price')}:** {currency_symbol}{current_price:.2f}")
+                            st.markdown(f"**{t('change')}:** <span style='color:{price_color}'>{change:.2f} ({pct_change:.2f}%)</span>", unsafe_allow_html=True)
                             
                         st.markdown("---")
                         
@@ -322,11 +350,11 @@ if stock_input:
             
             # TAB 3: TECHNICAL ANALYSIS
             with tabs[2]:
-                st.header("Technical Analysis")
+                st.header(t('tech_analysis'))
                 
                 # Stock selector for technical analysis
                 tech_stock = st.selectbox(
-                    "Select stock for technical analysis",
+                    t('select_stock'),
                     list(stock_data.keys()),
                     key="tech_stock_select"
                 )

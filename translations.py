@@ -129,6 +129,19 @@ TRANSLATIONS = {
         'total_debt': '總債務',
         'total_cash': '總現金',
         'free_cash_flow': '自由現金流',
+        'market_selection': '選擇市場',
+        'us_market': '美國股市',
+        'tw_market': '台灣股市',
+        'currency_usd': '美元',
+        'currency_twd': '新台幣',
+        'price_currency': '價格 ({})',
+        'stock_market': '股票市場',
+        'download_data': '下載數據',
+        'loading': '正在讀取...',
+        'days': '天',
+        'weeks': '週',
+        'months': '個月',
+        'years': '年',
     }
 }
 
