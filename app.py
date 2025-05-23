@@ -797,9 +797,12 @@ elif st.session_state['page'] == 'portfolio':
                     col1, col2, col3 = st.columns([1, 1, 1])
                     
                     with col1:
-                        if st.button(t('view'), key=f"view_{portfolio_id}"):
-                            # Store portfolio ID in session state
+                        view_btn = st.button(t('view'), key=f"view_{portfolio_id}")
+                        if view_btn:
+                            # Store portfolio ID in session state and force rerun
                             st.session_state['current_portfolio_id'] = portfolio_id
+                            # Add debug print
+                            st.write(f"设置当前投资组合ID: {portfolio_id}")
                             st.rerun()
                     
                     with col2:
