@@ -707,8 +707,13 @@ elif st.session_state['page'] == 'predictions':
                     with avg_col3:
                         st.metric(t('prediction_confidence'), f"{summary['confidence_score']:.0f}%")
                     
+                    # 顯示AI分析結果（如果有）
+                    if 'ai_explanation' in result and result['ai_explanation']:
+                        st.subheader("🤖 AI預測分析")
+                        st.markdown(result['ai_explanation'])
+                    
                     # Disclaimer
-                    st.info("⚠️ This prediction is based on historical data and should not be considered as financial advice. Always consult with a financial advisor before making investment decisions.")
+                    st.info("⚠️ 此預測基於歷史數據，不應被視為投資建議。投資前請務必諮詢專業財務顧問。")
                     
                 else:
                     st.error(t('prediction_error').format(result['error']))
