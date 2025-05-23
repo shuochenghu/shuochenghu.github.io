@@ -26,7 +26,7 @@ with st.sidebar:
     stock_input = st.text_input(
         "Enter stock symbols (comma-separated)",
         value="AAPL,MSFT,GOOGL",
-        help="Example: AAPL,MSFT,GOOGL"
+        help="Example: AAPL,MSFT,GOOGL or 2330.TW,3008.TW for Taiwan stocks"
     )
     
     # Time period selection
