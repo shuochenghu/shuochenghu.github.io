@@ -7,7 +7,7 @@ import yfinance as yf
 from datetime import datetime, timedelta
 import uuid
 from utils import calculate_technical_indicators, get_company_info, format_large_number
-from database import (
+from simplified_database import (
     save_stock_data, get_cached_stock_data, 
     save_user_preference, get_user_preference,
     save_favorite_stock, remove_favorite_stock, get_favorite_stocks
@@ -25,16 +25,20 @@ st.set_page_config(
 # Get user ID for database operations
 user_id = get_user_id()
 
-# Get saved language preference or default to English
-default_language = get_user_preference(user_id, 'language', 'en')
+# Language options
 language_options = {
     'English': 'en',
     '繁體中文': 'zh-tw'
 }
 
+# Get saved language preference or default to English
+if 'language' not in st.session_state:
+    default_language = get_user_preference(user_id, 'language', 'en')
+    st.session_state['language'] = default_language
+
 # Function to translate text based on current language
 def t(key):
-    return get_translation(key, language=current_language)
+    return get_translation(key, language=st.session_state['language'])
 
 # Application title
 st.title(t('app_title'))
@@ -42,13 +46,27 @@ st.markdown(t('app_subtitle'))
 
 # Sidebar for inputs
 with st.sidebar:
-    st.header("Settings")
+    st.header(t('settings'))
+    
+    # Language selector
+    selected_language_name = st.selectbox(
+        t('language'),
+        options=list(language_options.keys()),
+        index=list(language_options.values()).index(st.session_state['language']) if st.session_state['language'] in language_options.values() else 0
+    )
+    
+    # Update language if changed
+    selected_language = language_options[selected_language_name]
+    if selected_language != st.session_state['language']:
+        st.session_state['language'] = selected_language
+        save_user_preference(user_id, 'language', selected_language)
+        st.rerun()
     
     # Input for stock symbols
     stock_input = st.text_input(
-        "Enter stock symbols (comma-separated)",
+        t('enter_symbols'),
         value="AAPL,MSFT,GOOGL",
-        help="Example: AAPL,MSFT,GOOGL or 2330.TW,3008.TW for Taiwan stocks"
+        help=t('symbols_help')
     )
     
     # Time period selection
@@ -63,7 +81,7 @@ with st.sidebar:
     }
     
     selected_period = st.selectbox(
-        "Select time period", 
+        t('time_period'), 
         list(period_options.keys()),
         index=3  # Default to 1 Year
     )
@@ -78,7 +96,7 @@ with st.sidebar:
     }
     
     selected_interval = st.selectbox(
-        "Select interval", 
+        t('interval'), 
         list(interval_options.keys()),
         index=0  # Default to 1 Day
     )
@@ -86,31 +104,31 @@ with st.sidebar:
     interval = interval_options[selected_interval]
     
     # Technical indicator selection
-    st.subheader("Technical Indicators")
-    show_sma = st.checkbox("Simple Moving Average (SMA)", value=True)
-    show_ema = st.checkbox("Exponential Moving Average (EMA)", value=False)
-    show_rsi = st.checkbox("Relative Strength Index (RSI)", value=True)
-    show_macd = st.checkbox("MACD", value=False)
-    show_bollinger = st.checkbox("Bollinger Bands", value=False)
+    st.subheader(t('tech_indicators'))
+    show_sma = st.checkbox(t('sma'), value=True)
+    show_ema = st.checkbox(t('ema'), value=False)
+    show_rsi = st.checkbox(t('rsi'), value=True)
+    show_macd = st.checkbox(t('macd'), value=False)
+    show_bollinger = st.checkbox(t('bollinger'), value=False)
     
     # Parameters for indicators
     if show_sma:
-        sma_period = st.slider("SMA Period", 5, 200, 50)
+        sma_period = st.slider(f"{t('sma')} {t('period')}", 5, 200, 50)
     
     if show_ema:
-        ema_period = st.slider("EMA Period", 5, 200, 20)
+        ema_period = st.slider(f"{t('ema')} {t('period')}", 5, 200, 20)
         
     if show_rsi:
-        rsi_period = st.slider("RSI Period", 5, 30, 14)
+        rsi_period = st.slider(f"{t('rsi')} {t('period')}", 5, 30, 14)
         
     if show_macd:
-        macd_fast = st.slider("MACD Fast Period", 5, 20, 12)
-        macd_slow = st.slider("MACD Slow Period", 10, 40, 26)
-        macd_signal = st.slider("MACD Signal Period", 5, 15, 9)
+        macd_fast = st.slider(f"{t('macd')} Fast {t('period')}", 5, 20, 12)
+        macd_slow = st.slider(f"{t('macd')} Slow {t('period')}", 10, 40, 26)
+        macd_signal = st.slider(f"{t('macd')} Signal {t('period')}", 5, 15, 9)
         
     if show_bollinger:
-        bollinger_period = st.slider("Bollinger Period", 5, 50, 20)
-        bollinger_std = st.slider("Bollinger Standard Deviation", 1, 4, 2)
+        bollinger_period = st.slider(f"{t('bollinger')} {t('period')}", 5, 50, 20)
+        bollinger_std = st.slider(f"{t('bollinger')} {t('std_dev')}", 1, 4, 2)
 
 # Process stock symbols
 if stock_input:
