@@ -779,60 +779,222 @@ elif st.session_state['page'] == 'portfolio':
     
     # Tab 1: My Portfolios
     with portfolio_tabs[0]:
-        # Get user's portfolios
-        portfolios = get_portfolios(user_id)
+        # 在页面顶部显示会话状态，用于调试
+        st.write("调试信息: 当前投资组合ID", st.session_state.get('current_portfolio_id', '无'))
         
-        if portfolios:
-            # Show user's portfolios
-            st.subheader(t('my_portfolios'))
+        # 添加特定的查看投资组合逻辑
+        portfolio_to_view = st.session_state.get('current_portfolio_id', None)
+        
+        # 如果有选定的投资组合，直接显示详情
+        if portfolio_to_view:
+            # 查找选定的投资组合信息
+            portfolios = get_portfolios(user_id)
+            selected_portfolio = None
             
-            # Create a card for each portfolio
-            for i, (portfolio_id, name, description) in enumerate(portfolios):
-                with st.expander(name, expanded=True if i == 0 else False):
-                    # If description exists, show it
-                    if description:
-                        st.markdown(f"*{description}*")
-                    
-                    # Create buttons for portfolio actions
-                    col1, col2, col3 = st.columns([1, 1, 1])
-                    
-                    with col1:
-                        view_btn = st.button(t('view'), key=f"view_{portfolio_id}")
-                        if view_btn:
-                            # Store portfolio ID in session state and force rerun
-                            st.session_state['current_portfolio_id'] = portfolio_id
-                            # Add debug print
-                            st.write(f"设置当前投资组合ID: {portfolio_id}")
-                            st.rerun()
-                    
-                    with col2:
-                        if st.button(t('delete'), key=f"delete_{portfolio_id}"):
-                            # Show confirmation dialog
-                            st.session_state[f'confirm_delete_{portfolio_id}'] = True
-                            st.rerun()
-                    
-                    # Handle delete confirmation
-                    if st.session_state.get(f'confirm_delete_{portfolio_id}', False):
-                        st.warning(t('confirm_delete'))
-                        conf_col1, conf_col2 = st.columns([1, 1])
+            for pid, name, desc in portfolios:
+                if pid == portfolio_to_view:
+                    selected_portfolio = (pid, name, desc)
+                    break
+            
+            if selected_portfolio:
+                st.subheader(f"投资组合: {selected_portfolio[1]}")
+                if selected_portfolio[2]:
+                    st.markdown(f"*{selected_portfolio[2]}*")
+                
+                # Get portfolio items
+                items = get_portfolio_items(portfolio_to_view)
+                
+                # 添加返回按钮
+                if st.button("返回投资组合列表"):
+                    st.session_state.pop('current_portfolio_id', None)
+                    st.rerun()
+                
+                # 添加股票按钮
+                if st.button("添加股票", key=f"add_stock_{portfolio_to_view}"):
+                    st.session_state[f'add_stock_{portfolio_to_view}'] = True
+                    st.rerun()
+                
+                # 处理添加股票表单
+                if st.session_state.get(f'add_stock_{portfolio_to_view}', False):
+                    with st.form(key=f"add_stock_form_{portfolio_to_view}"):
+                        st.subheader("添加股票")
+                        new_symbol = st.text_input("股票代码").strip().upper()
+                        new_shares = st.number_input("股数", min_value=0.01, step=0.01)
+                        new_price = st.number_input("购买价格", min_value=0.01, step=0.01)
+                        new_date = st.date_input("购买日期", value=datetime.now())
+                        new_notes = st.text_area("备注", "")
                         
-                        with conf_col1:
-                            if st.button(t('yes'), key=f"confirm_yes_{portfolio_id}"):
-                                # Delete portfolio
-                                delete_portfolio(portfolio_id)
-                                # Reset confirmation state
-                                st.session_state[f'confirm_delete_{portfolio_id}'] = False
-                                st.success(f"Portfolio '{name}' deleted.")
+                        # 提交按钮
+                        submitted = st.form_submit_button("保存")
+                        
+                        if submitted:
+                            if new_symbol and new_shares > 0:
+                                # 添加股票到投资组合
+                                add_portfolio_item(
+                                    portfolio_to_view, 
+                                    new_symbol, 
+                                    new_shares, 
+                                    new_price, 
+                                    new_date,
+                                    new_notes
+                                )
+                                st.success(f"添加 {new_symbol} 到投资组合。")
+                                st.session_state[f'add_stock_{portfolio_to_view}'] = False
+                                st.rerun()
+                            else:
+                                st.error("股票代码和股数为必填项。")
+                    
+                    # 取消按钮
+                    if st.button("取消", key=f"cancel_add_{portfolio_to_view}"):
+                        st.session_state[f'add_stock_{portfolio_to_view}'] = False
+                        st.rerun()
+                
+                # 显示投资组合内容
+                if items:
+                    # 处理股票数据显示
+                    stock_data = []
+                    total_value = 0
+                    total_cost = 0
+                    
+                    for symbol, shares, price, date, notes in items:
+                        try:
+                            # 获取当前股票数据
+                            ticker = yf.Ticker(symbol)
+                            history = ticker.history(period="1d")
+                            
+                            if not history.empty:
+                                current_price = history['Close'].iloc[-1]
+                                market_value = shares * current_price
+                                cost_basis = shares * (price if price else current_price)
+                                profit_loss = market_value - cost_basis
+                                profit_loss_pct = (profit_loss / cost_basis * 100) if cost_basis > 0 else 0
+                                
+                                stock_data.append({
+                                    'symbol': symbol,
+                                    'shares': shares,
+                                    'purchase_price': price,
+                                    'purchase_date': date,
+                                    'current_price': current_price,
+                                    'market_value': market_value,
+                                    'cost_basis': cost_basis,
+                                    'profit_loss': profit_loss,
+                                    'profit_loss_pct': profit_loss_pct,
+                                    'notes': notes
+                                })
+                                
+                                total_value += market_value
+                                total_cost += cost_basis
+                        except Exception as e:
+                            st.error(f"获取 {symbol} 数据时出错: {str(e)}")
+                    
+                    if stock_data:
+                        # 当前持仓表格
+                        st.subheader("当前持仓")
+                        
+                        # 创建数据框
+                        df = pd.DataFrame(stock_data)
+                        
+                        # 根据股票市场确定货币符号
+                        first_symbol = stock_data[0]['symbol'] if stock_data else ""
+                        currency_symbol = "NT$" if first_symbol.endswith('.TW') else "$"
+                        
+                        # 格式化数据框
+                        formatted_df = pd.DataFrame({
+                            "股票代码": df['symbol'],
+                            "股数": df['shares'].map('{:.2f}'.format),
+                            "购买价格": df['purchase_price'].map(lambda x: f"{currency_symbol}{x:.2f}" if x else "N/A"),
+                            "当前价格": df['current_price'].map(f"{currency_symbol}{{:.2f}}".format),
+                            "市值": df['market_value'].map(f"{currency_symbol}{{:.2f}}".format),
+                            "盈亏": df['profit_loss'].map(lambda x: f"{currency_symbol}{x:.2f}"),
+                            "盈亏百分比": df['profit_loss_pct'].map(lambda x: f"{x:.2f}%")
+                        })
+                        
+                        st.dataframe(formatted_df)
+                        
+                        # 显示投资组合总值和盈亏
+                        st.subheader("投资组合总值")
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.metric(
+                                "总市值", 
+                                f"{currency_symbol}{total_value:.2f}"
+                            )
+                        
+                        with col2:
+                            st.metric(
+                                "总成本", 
+                                f"{currency_symbol}{total_cost:.2f}"
+                            )
+                        
+                        with col3:
+                            total_profit_loss = total_value - total_cost
+                            total_profit_loss_pct = (total_profit_loss / total_cost * 100) if total_cost > 0 else 0
+                            
+                            st.metric(
+                                "总盈亏", 
+                                f"{currency_symbol}{total_profit_loss:.2f}",
+                                f"{total_profit_loss_pct:.2f}%"
+                            )
+                    else:
+                        st.info("此投资组合中没有股票。")
+                else:
+                    st.info("此投资组合中还没有股票。请添加股票以开始。")
+            else:
+                st.error("找不到所选投资组合。")
+                st.session_state.pop('current_portfolio_id', None)
+                st.rerun()
+        
+        # 如果没有选定的投资组合，显示投资组合列表
+        else:
+            # Get user's portfolios
+            portfolios = get_portfolios(user_id)
+            
+            if portfolios:
+                # Show user's portfolios
+                st.subheader(t('my_portfolios'))
+                
+                # Create a card for each portfolio
+                for i, (portfolio_id, name, description) in enumerate(portfolios):
+                    with st.expander(name, expanded=True if i == 0 else False):
+                        # If description exists, show it
+                        if description:
+                            st.markdown(f"*{description}*")
+                        
+                        # Create buttons for portfolio actions
+                        col1, col2, col3 = st.columns([1, 1, 1])
+                        
+                        with col1:
+                            if st.button("查看", key=f"view_{portfolio_id}"):
+                                # Store portfolio ID and rerun
+                                st.session_state['current_portfolio_id'] = portfolio_id
                                 st.rerun()
                         
-                        with conf_col2:
-                            if st.button(t('no'), key=f"confirm_no_{portfolio_id}"):
-                                # Reset confirmation state
-                                st.session_state[f'confirm_delete_{portfolio_id}'] = False
+                        with col2:
+                            if st.button(t('delete'), key=f"delete_{portfolio_id}"):
+                                # Show confirmation dialog
+                                st.session_state[f'confirm_delete_{portfolio_id}'] = True
                                 st.rerun()
-                    
-                    # Show portfolio details if selected
-                    if st.session_state.get('current_portfolio_id') == portfolio_id:
+                        
+                        # Handle delete confirmation
+                        if st.session_state.get(f'confirm_delete_{portfolio_id}', False):
+                            st.warning(t('confirm_delete'))
+                            conf_col1, conf_col2 = st.columns([1, 1])
+                            
+                            with conf_col1:
+                                if st.button(t('yes'), key=f"confirm_yes_{portfolio_id}"):
+                                    # Delete portfolio
+                                    delete_portfolio(portfolio_id)
+                                    # Reset confirmation state
+                                    st.session_state[f'confirm_delete_{portfolio_id}'] = False
+                                    st.success(f"Portfolio '{name}' deleted.")
+                                    st.rerun()
+                            
+                            with conf_col2:
+                                if st.button(t('no'), key=f"confirm_no_{portfolio_id}"):
+                                    # Reset confirmation state
+                                    st.session_state[f'confirm_delete_{portfolio_id}'] = False
+                                    st.rerun()
                         # Show portfolio details
                         st.subheader(t('portfolio_details'))
                         
