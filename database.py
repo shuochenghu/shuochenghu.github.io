@@ -73,6 +73,37 @@ class FavoriteStock(Base):
     def __repr__(self):
         return f"<FavoriteStock(user_id='{self.user_id}', symbol='{self.symbol}')>"
 
+# Define the Portfolio model for tracking user's stock portfolio
+class Portfolio(Base):
+    __tablename__ = 'portfolio'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String, index=True, nullable=False)
+    name = Column(String, nullable=False, default="Default Portfolio")
+    description = Column(String)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<Portfolio(user_id='{self.user_id}', name='{self.name}')>"
+
+# Define the PortfolioItem model for individual holdings in a portfolio
+class PortfolioItem(Base):
+    __tablename__ = 'portfolio_items'
+    
+    id = Column(Integer, primary_key=True)
+    portfolio_id = Column(Integer, ForeignKey('portfolio.id', ondelete='CASCADE'), nullable=False)
+    symbol = Column(String, nullable=False)
+    shares = Column(Float, default=0)
+    purchase_price = Column(Float)
+    purchase_date = Column(DateTime)
+    notes = Column(String)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<PortfolioItem(portfolio_id='{self.portfolio_id}', symbol='{self.symbol}', shares={self.shares})>"
+
 # Create all tables in the database
 Base.metadata.create_all(engine)
 
@@ -292,6 +323,181 @@ def get_favorite_stocks(user_id):
     except Exception as e:
         print(f"Error getting favorite stocks: {e}")
         return []
+    
+    finally:
+        session.close()
+        
+def create_portfolio(user_id, name, description=None):
+    """Create a new portfolio for a user"""
+    session = get_session()
+    
+    try:
+        portfolio = Portfolio(
+            user_id=user_id,
+            name=name,
+            description=description
+        )
+        session.add(portfolio)
+        session.commit()
+        return portfolio.id
+    
+    except Exception as e:
+        session.rollback()
+        print(f"Error creating portfolio: {e}")
+        return None
+    
+    finally:
+        session.close()
+
+def get_portfolios(user_id):
+    """Get all portfolios for a user"""
+    session = get_session()
+    
+    try:
+        portfolios = session.query(Portfolio).filter_by(
+            user_id=user_id
+        ).all()
+        
+        return [(p.id, p.name, p.description) for p in portfolios]
+    
+    except Exception as e:
+        print(f"Error getting portfolios: {e}")
+        return []
+    
+    finally:
+        session.close()
+        
+def delete_portfolio(portfolio_id):
+    """Delete a portfolio and all its items"""
+    session = get_session()
+    
+    try:
+        portfolio = session.query(Portfolio).filter_by(
+            id=portfolio_id
+        ).first()
+        
+        if portfolio:
+            session.delete(portfolio)
+            session.commit()
+            return True
+        return False
+    
+    except Exception as e:
+        session.rollback()
+        print(f"Error deleting portfolio: {e}")
+        return False
+    
+    finally:
+        session.close()
+        
+def add_portfolio_item(portfolio_id, symbol, shares, purchase_price=None, purchase_date=None, notes=None):
+    """Add a stock item to a portfolio"""
+    session = get_session()
+    
+    try:
+        # Check if item already exists
+        item = session.query(PortfolioItem).filter_by(
+            portfolio_id=portfolio_id,
+            symbol=symbol
+        ).first()
+        
+        if item:
+            # Update existing item
+            item.shares = shares
+            if purchase_price is not None:
+                item.purchase_price = purchase_price
+            if purchase_date is not None:
+                item.purchase_date = purchase_date
+            if notes is not None:
+                item.notes = notes
+        else:
+            # Create new item
+            item = PortfolioItem(
+                portfolio_id=portfolio_id,
+                symbol=symbol,
+                shares=shares,
+                purchase_price=purchase_price,
+                purchase_date=purchase_date,
+                notes=notes
+            )
+            session.add(item)
+            
+        session.commit()
+        return True
+    
+    except Exception as e:
+        session.rollback()
+        print(f"Error adding portfolio item: {e}")
+        return False
+    
+    finally:
+        session.close()
+        
+def remove_portfolio_item(portfolio_id, symbol):
+    """Remove a stock item from a portfolio"""
+    session = get_session()
+    
+    try:
+        item = session.query(PortfolioItem).filter_by(
+            portfolio_id=portfolio_id,
+            symbol=symbol
+        ).first()
+        
+        if item:
+            session.delete(item)
+            session.commit()
+            return True
+        return False
+    
+    except Exception as e:
+        session.rollback()
+        print(f"Error removing portfolio item: {e}")
+        return False
+    
+    finally:
+        session.close()
+        
+def get_portfolio_items(portfolio_id):
+    """Get all items in a portfolio"""
+    session = get_session()
+    
+    try:
+        items = session.query(PortfolioItem).filter_by(
+            portfolio_id=portfolio_id
+        ).all()
+        
+        return [(item.symbol, item.shares, item.purchase_price, item.purchase_date, item.notes) 
+                for item in items]
+    
+    except Exception as e:
+        print(f"Error getting portfolio items: {e}")
+        return []
+    
+    finally:
+        session.close()
+        
+def get_portfolio_by_id(portfolio_id):
+    """Get portfolio by ID"""
+    session = get_session()
+    
+    try:
+        portfolio = session.query(Portfolio).filter_by(
+            id=portfolio_id
+        ).first()
+        
+        if portfolio:
+            return {
+                'id': portfolio.id,
+                'user_id': portfolio.user_id,
+                'name': portfolio.name,
+                'description': portfolio.description,
+                'created_at': portfolio.created_at
+            }
+        return None
+    
+    except Exception as e:
+        print(f"Error getting portfolio: {e}")
+        return None
     
     finally:
         session.close()

@@ -10,10 +10,13 @@ from utils import calculate_technical_indicators, get_company_info, format_large
 from simplified_database import (
     save_stock_data, get_cached_stock_data, 
     save_user_preference, get_user_preference,
-    save_favorite_stock, remove_favorite_stock, get_favorite_stocks
+    save_favorite_stock, remove_favorite_stock, get_favorite_stocks,
+    create_portfolio, get_portfolios, delete_portfolio,
+    add_portfolio_item, remove_portfolio_item, get_portfolio_items, get_portfolio_by_id
 )
 from session_state import get_user_id
 from translations import get_translation
+from prediction import StockPredictor
 
 # Page configuration
 st.set_page_config(
