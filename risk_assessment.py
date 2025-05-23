@@ -33,7 +33,24 @@ class PortfolioRiskAnalyzer:
         """
         # Get historical data
         end_date = datetime.now()
-        data = yf.download(symbols, period=period)['Adj Close']
+        data = yf.download(symbols, period=period)
+        
+        # 确保能够获取到数据
+        if data.empty:
+            raise Exception("无法获取股票历史数据")
+            
+        # 确保有收盘价数据
+        if 'Adj Close' in data.columns:
+            data = data['Adj Close']
+        elif 'Close' in data.columns:
+            data = data['Close']
+        else:
+            # 如果是单一股票，数据结构可能不同
+            if len(symbols) == 1:
+                if 'Adj Close' in data:
+                    data = data['Adj Close']
+                else:
+                    data = data['Close']
         
         # Calculate returns
         returns = data.pct_change().dropna()
