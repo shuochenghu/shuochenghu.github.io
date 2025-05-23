@@ -926,8 +926,19 @@ elif st.session_state['page'] == 'portfolio':
                                 risk_analysis = risk_analyzer.assess_portfolio_risk(symbols, weights, total_value)
                                 
                                 if 'error' in risk_analysis:
-                                    st.error(f"Error in risk analysis: {risk_analysis['error']}")
+                                    st.error(f"錯誤信息: {risk_analysis['error']}")
                                 else:
+                                    # 嘗試進行AI分析
+                                    try:
+                                        from ai_analysis import analyze_portfolio_risk
+                                        with st.spinner("AI正在分析投資組合風險..."):
+                                            ai_analysis = analyze_portfolio_risk(stock_data, risk_analysis)
+                                            if ai_analysis.get('status') == 'success':
+                                                st.info("🤖 AI分析")
+                                                st.markdown(ai_analysis.get('analysis', '無法提供AI分析'))
+                                    except Exception as e:
+                                        st.warning(f"無法提供AI分析: {str(e)}")
+                                    
                                     # 显示风险指标
                                     st.subheader(t('risk_metrics'))
                                     metrics_col1, metrics_col2, metrics_col3 = st.columns(3)

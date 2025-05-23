@@ -151,7 +151,7 @@ class SimpleStockPredictor:
             go.Scatter(
                 x=historical_data.index,
                 y=historical_data['Close'],
-                name='Historical Price',
+                name='歷史價格',
                 line=dict(color='blue')
             )
         )
@@ -164,7 +164,7 @@ class SimpleStockPredictor:
             go.Scatter(
                 x=prophet_dates,
                 y=prophet_values,
-                name='Prophet Prediction',
+                name='Prophet 預測',
                 line=dict(color='green')
             )
         )
@@ -178,7 +178,7 @@ class SimpleStockPredictor:
                 fill='toself',
                 fillcolor='rgba(0,100,80,0.2)',
                 line=dict(color='rgba(0,100,80,0.2)'),
-                name='Prophet Confidence Interval'
+                name='Prophet 置信區間'
             )
         )
         
@@ -187,20 +187,86 @@ class SimpleStockPredictor:
             go.Scatter(
                 x=linear_predictions.index,
                 y=linear_predictions['Prediction'],
-                name='Linear Regression Prediction',
+                name='線性回歸預測',
                 line=dict(color='red')
             )
         )
         
         # Update layout
         fig.update_layout(
-            title=f"{ticker_symbol} Stock Price Prediction",
-            xaxis_title="Date",
-            yaxis_title=f"Stock Price ({currency_symbol})",
-            legend_title="Data Source",
+            title=f"{ticker_symbol} 股票價格預測",
+            xaxis_title="日期",
+            yaxis_title=f"股票價格 ({currency_symbol})",
+            legend_title="數據來源",
             height=600,
             hovermode="x unified"
         )
+        
+        # 添加圖例說明
+        annotations = [
+            dict(
+                x=0.01,
+                y=0.98,
+                xref="paper", 
+                yref="paper",
+                text="<b>圖例說明:</b>",
+                showarrow=False,
+                font=dict(size=12),
+                bgcolor="rgba(255,255,255,0.8)",
+                bordercolor="black",
+                borderwidth=1
+            ),
+            dict(
+                x=0.01,
+                y=0.95,
+                xref="paper", 
+                yref="paper",
+                text="<b>藍線</b>: 歷史價格數據",
+                showarrow=False,
+                font=dict(size=11),
+                bgcolor="rgba(255,255,255,0.8)",
+                bordercolor="black",
+                borderwidth=1
+            ),
+            dict(
+                x=0.01,
+                y=0.92,
+                xref="paper", 
+                yref="paper",
+                text="<b>綠線</b>: Prophet模型預測 (適合季節性和趨勢分析)",
+                showarrow=False,
+                font=dict(size=11),
+                bgcolor="rgba(255,255,255,0.8)",
+                bordercolor="black",
+                borderwidth=1
+            ),
+            dict(
+                x=0.01,
+                y=0.89,
+                xref="paper", 
+                yref="paper",
+                text="<b>淺綠色區域</b>: Prophet預測的置信區間",
+                showarrow=False,
+                font=dict(size=11),
+                bgcolor="rgba(255,255,255,0.8)",
+                bordercolor="black",
+                borderwidth=1
+            ),
+            dict(
+                x=0.01,
+                y=0.86,
+                xref="paper", 
+                yref="paper",
+                text="<b>紅線</b>: 線性回歸模型預測 (適合短期趨勢)",
+                showarrow=False,
+                font=dict(size=11),
+                bgcolor="rgba(255,255,255,0.8)",
+                bordercolor="black",
+                borderwidth=1
+            ),
+        ]
+        
+        fig.update_layout(annotations=annotations)
         
         return fig
     
@@ -221,12 +287,27 @@ class SimpleStockPredictor:
         try:
             data = yf.download(ticker_symbol, period=period)
             
-            # Make sure we have enough data
-            if len(data) < 100:
+            # 檢查是否有數據
+            if data.empty:
                 return {
                     'success': False,
-                    'error': 'Not enough historical data for prediction'
+                    'error': '無法獲取股票歷史數據'
                 }
+            
+            # 確保有足夠的數據進行預測
+            min_data_points = max(100, prophet_days + 20, linear_days + 20)
+            
+            if len(data) < min_data_points:
+                # 嘗試獲取更長時間的數據
+                longer_period = "2y" if period == "1y" else "5y"
+                data = yf.download(ticker_symbol, period=longer_period)
+                
+                # 如果仍然數據不足，則返回錯誤
+                if len(data) < min_data_points:
+                    return {
+                        'success': False,
+                        'error': f'預測至少需要{min_data_points}天的歷史數據，僅找到{len(data)}天'
+                    }
             
             # Prophet prediction
             prophet_forecast = self.fit_prophet_model(data, period=prophet_days)
@@ -285,7 +366,8 @@ class SimpleStockPredictor:
                 'confidence_score': confidence
             }
             
-            return {
+            # 準備結果
+            result = {
                 'success': True,
                 'historical_data': data,
                 'prophet_forecast': prophet_forecast,
@@ -293,6 +375,26 @@ class SimpleStockPredictor:
                 'prediction_summary': prediction_summary,
                 'prediction_chart': prediction_chart
             }
+            
+            # 嘗試添加AI解釋
+            try:
+                from ai_analysis import get_stock_prediction_explanation
+                explanation = get_stock_prediction_explanation(ticker_symbol, {
+                    'ticker': ticker_symbol,
+                    'last_price': current_price,
+                    'prophet_prediction': {
+                        'forecast': [prophet_last]
+                    },
+                    'linear_prediction': {
+                        'forecast': [linear_last]
+                    }
+                })
+                result['ai_explanation'] = explanation
+            except Exception as ai_error:
+                # 如果AI解釋失敗，繼續不中斷主功能
+                result['ai_explanation'] = None
+            
+            return result
             
         except Exception as e:
             return {
