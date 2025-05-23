@@ -240,10 +240,10 @@ class SimpleStockPredictor:
                 data, prophet_forecast, linear_predictions, ticker_symbol
             )
             
-            # Create a prediction summary
-            current_price = data['Close'].iloc[-1]
-            prophet_last = prophet_forecast['yhat'].iloc[-1]
-            linear_last = linear_predictions['Prediction'].iloc[-1]
+            # Create a prediction summary (ensuring scalar values)
+            current_price = float(data['Close'].iloc[-1])
+            prophet_last = float(prophet_forecast['yhat'].iloc[-1])
+            linear_last = float(linear_predictions['Prediction'].iloc[-1])
             
             # Calculate predicted change
             prophet_change = (prophet_last - current_price) / current_price * 100
@@ -253,16 +253,19 @@ class SimpleStockPredictor:
             avg_prediction = (prophet_last + linear_last) / 2
             avg_change = (avg_prediction - current_price) / current_price * 100
             
-            # Determine trend
-            if avg_change > 2:
+            # Determine trend (making sure to use scalar values not pandas Series)
+            avg_change_value = float(avg_change)
+            if avg_change_value > 2:
                 trend = "up"
-            elif avg_change < -2:
+            elif avg_change_value < -2:
                 trend = "down"
             else:
                 trend = "sideways"
                 
-            # Confidence score based on agreement between models
-            confidence = 100 - min(abs(prophet_change - linear_change), 50)
+            # Confidence score based on agreement between models (ensuring scalar values)
+            prophet_change_value = float(prophet_change)
+            linear_change_value = float(linear_change)
+            confidence = 100 - min(abs(prophet_change_value - linear_change_value), 50)
             
             prediction_summary = {
                 'current_price': current_price,
