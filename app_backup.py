@@ -159,38 +159,26 @@ with st.sidebar:
     # Parameters for indicators
     if show_sma:
         sma_period = st.slider(f"{t('sma')} {t('period')}", 5, 200, 50)
-    else:
-        sma_period = 50
-        
+    
     if show_ema:
         ema_period = st.slider(f"{t('ema')} {t('period')}", 5, 200, 20)
-    else:
-        ema_period = 20
         
     if show_rsi:
         rsi_period = st.slider(f"{t('rsi')} {t('period')}", 5, 30, 14)
-    else:
-        rsi_period = 14
         
     if show_macd:
         macd_fast = st.slider(f"{t('macd')} Fast {t('period')}", 5, 20, 12)
         macd_slow = st.slider(f"{t('macd')} Slow {t('period')}", 10, 40, 26)
         macd_signal = st.slider(f"{t('macd')} Signal {t('period')}", 5, 15, 9)
-    else:
-        macd_fast = 12
-        macd_slow = 26
-        macd_signal = 9
         
     if show_bollinger:
         bollinger_period = st.slider(f"{t('bollinger')} {t('period')}", 5, 50, 20)
         bollinger_std = st.slider(f"{t('bollinger')} {t('std_dev')}", 1, 4, 2)
-    else:
-        bollinger_period = 20
-        bollinger_std = 2
 
 # Main content based on selected page
 if st.session_state['page'] == 'stock_analysis':
     # Stock Analysis Page
+    # Process stock symbols
     if stock_input:
         # Clean up input
         stocks = [symbol.strip().upper() for symbol in stock_input.split(",")]
@@ -206,454 +194,408 @@ if st.session_state['page'] == 'stock_analysis':
             
             # Flag to track if any data was retrieved successfully
             valid_data = False
+        
+        # Loop through each stock and fetch data
+        for stock in stocks:
+            with st.spinner(f"Loading data for {stock}..."):
+                try:
+                    # Get stock data
+                    ticker = yf.Ticker(stock)
+                    hist = ticker.history(period=period, interval=interval)
+                    
+                    if hist.empty:
+                        st.warning(f"No data available for {stock}. Please check the symbol.")
+                        continue
+                    
+                    # Calculate technical indicators
+                    hist = calculate_technical_indicators(
+                        hist, 
+                        sma_period=sma_period if show_sma else None,
+                        ema_period=ema_period if show_ema else None,
+                        rsi_period=rsi_period if show_rsi else None,
+                        macd_params=(macd_fast, macd_slow, macd_signal) if show_macd else None,
+                        bollinger_params=(bollinger_period, bollinger_std) if show_bollinger else None
+                    )
+                    
+                    # Get company info
+                    info = get_company_info(ticker)
+                    
+                    # Store data
+                    stock_data[stock] = {
+                        "price_data": hist,
+                        "info": info
+                    }
+                    
+                    # Prepare data for download
+                    temp_df = hist.copy()
+                    temp_df['Symbol'] = stock
+                    all_data_df = pd.concat([all_data_df, temp_df])
+                    
+                    valid_data = True
+                    
+                except Exception as e:
+                    st.error(f"Error fetching data for {stock}: {str(e)}")
+        
+        # Only proceed if we have valid data
+        if valid_data:
+            # Create color map for consistent colors across charts
+            colors = [
+                '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+                '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+            ]
+            color_map = {stock: colors[i % len(colors)] for i, stock in enumerate(stock_data.keys())}
             
-            # Loop through each stock and fetch data
-            for stock in stocks:
-                with st.spinner(f"Loading data for {stock}..."):
-                    try:
-                        # Get stock data
-                        ticker = yf.Ticker(stock)
-                        hist = ticker.history(period=period, interval=interval)
-                        
-                        if hist.empty:
-                            st.warning(f"No data available for {stock}. Please check the symbol.")
-                            continue
-                        
-                        # Calculate technical indicators
-                        hist = calculate_technical_indicators(
-                            hist, 
-                            sma_period=sma_period if show_sma else None,
-                            ema_period=ema_period if show_ema else None,
-                            rsi_period=rsi_period if show_rsi else None,
-                            macd_params=(macd_fast, macd_slow, macd_signal) if show_macd else None,
-                            bollinger_params=(bollinger_period, bollinger_std) if show_bollinger else None
-                        )
-                        
-                        # Get company info
-                        info = get_company_info(ticker)
-                        
-                        # Store data
-                        stock_data[stock] = {
-                            "price_data": hist,
-                            "info": info
-                        }
-                        
-                        # Prepare data for download
-                        temp_df = hist.copy()
-                        temp_df['Symbol'] = stock
-                        all_data_df = pd.concat([all_data_df, temp_df])
-                        
-                        valid_data = True
-                        
-                    except Exception as e:
-                        st.error(f"Error fetching data for {stock}: {str(e)}")
-            
-            # Only proceed if we have valid data
-            if valid_data:
-                # Create color map for consistent colors across charts
-                colors = [
-                    '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-                    '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
-                ]
-                color_map = {stock: colors[i % len(colors)] for i, stock in enumerate(stock_data.keys())}
+            # TAB 1: PRICE COMPARISON
+            with tabs[0]:
+                st.header("Price Comparison")
                 
-                # TAB 1: PRICE COMPARISON
-                with tabs[0]:
-                    st.header("Price Comparison")
-                    
-                    # Create figure for price comparison
-                    fig = make_subplots(rows=1, cols=1)
-                    
-                    for i, (stock, data) in enumerate(stock_data.items()):
-                        df = data["price_data"]
-                        fig.add_trace(
-                            go.Scatter(
-                                x=df.index,
-                                y=df['Close'],
-                                name=f"{stock} Close",
-                                line=dict(color=color_map[stock]),
-                            )
+                # Create figure for price comparison
+                fig = make_subplots(rows=1, cols=1)
+                
+                for i, (stock, data) in enumerate(stock_data.items()):
+                    df = data["price_data"]
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df.index,
+                            y=df['Close'],
+                            name=f"{stock} Close",
+                            line=dict(color=color_map[stock]),
                         )
+                    )
+                
+                # Get correct currency based on selected market
+                currency = t('currency_usd') if st.session_state['market'] == 'us' else t('currency_twd')
+                
+                # Update layout
+                fig.update_layout(
+                    title=t('compare_stocks'),
+                    xaxis_title=t('date'),
+                    yaxis_title=t('price_currency').format(currency),
+                    legend_title=t('stocks'),
+                    height=600,
+                    hovermode="x unified"
+                )
+                
+                # Add range slider
+                fig.update_layout(
+                    xaxis=dict(
+                        rangeselector=dict(
+                            buttons=[
+                                dict(count=1, label="1m", step="month", stepmode="backward"),
+                                dict(count=3, label="3m", step="month", stepmode="backward"),
+                                dict(count=6, label="6m", step="month", stepmode="backward"),
+                                dict(count=1, label="1y", step="year", stepmode="backward"),
+                                dict(step="all")
+                            ]
+                        ),
+                        rangeslider=dict(visible=True),
+                        type="date"
+                    )
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Calculate percentage change
+                st.subheader("Percentage Change")
+                
+                # Create figure for percentage change
+                fig_pct = make_subplots(rows=1, cols=1)
+                
+                for i, (stock, data) in enumerate(stock_data.items()):
+                    df = data["price_data"].copy()
+                    df['Pct_Change'] = (df['Close'] / df['Close'].iloc[0] - 1) * 100
+                    
+                    fig_pct.add_trace(
+                        go.Scatter(
+                            x=df.index,
+                            y=df['Pct_Change'],
+                            name=f"{stock}",
+                            line=dict(color=color_map[stock]),
+                        )
+                    )
+                
+                # Update layout
+                fig_pct.update_layout(
+                    title=t('pct_change_period'),
+                    xaxis_title=t('date'),
+                    yaxis_title=t('pct_change'),
+                    legend_title=t('stocks'),
+                    height=400,
+                    hovermode="x unified"
+                )
+                
+                st.plotly_chart(fig_pct, use_container_width=True)
+            
+            # TAB 2: FINANCIAL DATA
+            with tabs[1]:
+                st.header(t('financial_comparison'))
+                
+                # Create a comparison table
+                comparison_data = {}
+                for stock, data in stock_data.items():
+                    info = data["info"]
+                    comparison_data[stock] = info
+                
+                # Set up the metrics to display
+                metrics = [
+                    "Market Cap", "P/E Ratio", "Forward P/E", "PEG Ratio", 
+                    "Dividend Yield (%)", "52 Week High", "52 Week Low", 
+                    "50-Day MA", "200-Day MA", "Revenue", "Profit Margin (%)",
+                    "Return on Equity (%)", "Return on Assets (%)", "Total Debt", 
+                    "Total Cash", "Free Cash Flow"
+                ]
+                
+                # Display key metrics
+                cols = st.columns(len(stock_data))
+                
+                for i, (stock, data) in enumerate(comparison_data.items()):
+                    with cols[i]:
+                        st.subheader(stock)
+                        if "Company Name" in data:
+                            st.caption(data["Company Name"])
+                            
+                        # Display current price
+                        if stock in stock_data and not stock_data[stock]["price_data"].empty:
+                            current_price = stock_data[stock]["price_data"]["Close"].iloc[-1]
+                            change = stock_data[stock]["price_data"]["Close"].iloc[-1] - stock_data[stock]["price_data"]["Close"].iloc[-2]
+                            pct_change = (change / stock_data[stock]["price_data"]["Close"].iloc[-2]) * 100
+                            
+                            # Display with correct currency symbol based on market
+                            currency_symbol = "$" if st.session_state['market'] == 'us' else "NT$"
+                            
+                            price_color = "green" if change >= 0 else "red"
+                            st.markdown(f"**{t('current_price')}:** {currency_symbol}{current_price:.2f}")
+                            st.markdown(f"**{t('change')}:** <span style='color:{price_color}'>{change:.2f} ({pct_change:.2f}%)</span>", unsafe_allow_html=True)
+                            
+                        st.markdown("---")
+                        
+                        # Display other metrics
+                        for metric in metrics:
+                            if metric in data and data[metric] is not None:
+                                st.markdown(f"**{metric}:** {data[metric]}")
+            
+            # TAB 3: TECHNICAL ANALYSIS
+            with tabs[2]:
+                st.header(t('tech_analysis'))
+                
+                # Stock selector for technical analysis
+                tech_stock = st.selectbox(
+                    t('select_stock'),
+                    list(stock_data.keys()),
+                    key="tech_stock_select"
+                )
+                
+                if tech_stock in stock_data:
+                    df = stock_data[tech_stock]["price_data"]
                     
                     # Get correct currency based on selected market
                     currency = t('currency_usd') if st.session_state['market'] == 'us' else t('currency_twd')
                     
-                    # Update layout
-                    fig.update_layout(
-                        title=t('compare_stocks'),
-                        xaxis_title=t('date'),
-                        yaxis_title=t('price_currency').format(currency),
-                        legend_title=t('stocks'),
-                        height=600,
-                        hovermode="x unified"
+                    # Create figure for price and indicators
+                    fig = make_subplots(
+                        rows=2, 
+                        cols=1, 
+                        shared_xaxes=True,
+                        vertical_spacing=0.1,
+                        row_heights=[0.7, 0.3],
+                        subplot_titles=(t('price_with_indicators').format(tech_stock), t('volume'))
                     )
                     
-                    # Add range slider
-                    fig.update_layout(
-                        xaxis=dict(
-                            rangeselector=dict(
-                                buttons=[
-                                    dict(count=1, label="1m", step="month", stepmode="backward"),
-                                    dict(count=3, label="3m", step="month", stepmode="backward"),
-                                    dict(count=6, label="6m", step="month", stepmode="backward"),
-                                    dict(count=1, label="1y", step="year", stepmode="backward"),
-                                    dict(step="all")
-                                ]
+                    # Add price candlestick
+                    fig.add_trace(
+                        go.Candlestick(
+                            x=df.index,
+                            open=df['Open'],
+                            high=df['High'],
+                            low=df['Low'],
+                            close=df['Close'],
+                            name=tech_stock
+                        ),
+                        row=1, col=1
+                    )
+                    
+                    # Add volume
+                    fig.add_trace(
+                        go.Bar(
+                            x=df.index,
+                            y=df['Volume'],
+                            name="Volume",
+                            marker=dict(color='rgba(0, 0, 255, 0.5)')
+                        ),
+                        row=2, col=1
+                    )
+                    
+                    # Add selected technical indicators
+                    if show_sma and 'SMA' in df.columns:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=df.index,
+                                y=df['SMA'],
+                                name=f"SMA ({sma_period})",
+                                line=dict(color='rgba(255, 165, 0, 0.7)')
                             ),
-                            rangeslider=dict(visible=True),
-                            type="date"
+                            row=1, col=1
                         )
+                    
+                    if show_ema and 'EMA' in df.columns:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=df.index,
+                                y=df['EMA'],
+                                name=f"EMA ({ema_period})",
+                                line=dict(color='rgba(128, 0, 128, 0.7)')
+                            ),
+                            row=1, col=1
+                        )
+                    
+                    if show_bollinger:
+                        if 'BB_Upper' in df.columns and 'BB_Lower' in df.columns:
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=df.index,
+                                    y=df['BB_Upper'],
+                                    name="Bollinger Upper",
+                                    line=dict(color='rgba(0, 128, 0, 0.3)')
+                                ),
+                                row=1, col=1
+                            )
+                            
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=df.index,
+                                    y=df['BB_Lower'],
+                                    name="Bollinger Lower",
+                                    line=dict(color='rgba(0, 128, 0, 0.3)'),
+                                    fill='tonexty',
+                                    fillcolor='rgba(0, 128, 0, 0.1)'
+                                ),
+                                row=1, col=1
+                            )
+                    
+                    # Update layout with correct currency
+                    currency = t('currency_usd') if st.session_state['market'] == 'us' else t('currency_twd')
+                    
+                    # Update layout
+                    fig.update_layout(
+                        title=f"{tech_stock} {t('tech_analysis')}",
+                        xaxis_title=t('date'),
+                        yaxis_title=t('price_currency').format(currency),
+                        xaxis_rangeslider_visible=False,
+                        height=700,
+                        hovermode="x unified"
                     )
                     
                     st.plotly_chart(fig, use_container_width=True)
                     
-                    # Calculate percentage change
-                    st.subheader("Percentage Change")
-                    
-                    # Create figure for percentage change
-                    fig_pct = make_subplots(rows=1, cols=1)
-                    
-                    for i, (stock, data) in enumerate(stock_data.items()):
-                        df = data["price_data"].copy()
-                        df['Pct_Change'] = (df['Close'] / df['Close'].iloc[0] - 1) * 100
+                    # Display RSI and MACD in separate charts if enabled
+                    if show_rsi or show_macd:
+                        indicator_cols = st.columns(2)
                         
-                        fig_pct.add_trace(
-                            go.Scatter(
-                                x=df.index,
-                                y=df['Pct_Change'],
-                                name=f"{stock}",
-                                line=dict(color=color_map[stock]),
-                            )
-                        )
-                    
-                    # Update layout
-                    fig_pct.update_layout(
-                        title=t('pct_change_period'),
-                        xaxis_title=t('date'),
-                        yaxis_title=t('pct_change'),
-                        legend_title=t('stocks'),
-                        height=400,
-                        hovermode="x unified"
-                    )
-                    
-                    st.plotly_chart(fig_pct, use_container_width=True)
-                
-                # TAB 2: FINANCIAL DATA
-                with tabs[1]:
-                    st.header(t('financial_comparison'))
-                    
-                    # Create a comparison table
-                    comparison_data = {}
-                    for stock, data in stock_data.items():
-                        info = data["info"]
-                        comparison_data[stock] = info
-                    
-                    # Set up the metrics to display
-                    metrics = [
-                        "Market Cap", "P/E Ratio", "Forward P/E", "PEG Ratio", 
-                        "Dividend Yield (%)", "52 Week High", "52 Week Low", 
-                        "50-Day MA", "200-Day MA", "Revenue", "Profit Margin (%)",
-                        "Return on Equity (%)", "Return on Assets (%)", "Total Debt", 
-                        "Total Cash", "Free Cash Flow"
-                    ]
-                    
-                    # Display key metrics
-                    cols = st.columns(len(stock_data))
-                    
-                    for i, (stock, data) in enumerate(comparison_data.items()):
-                        with cols[i]:
-                            st.subheader(stock)
-                            if "Company Name" in data:
-                                st.caption(data["Company Name"])
-                                
-                            # Display current price
-                            if stock in stock_data and not stock_data[stock]["price_data"].empty:
-                                current_price = stock_data[stock]["price_data"]["Close"].iloc[-1]
-                                change = stock_data[stock]["price_data"]["Close"].iloc[-1] - stock_data[stock]["price_data"]["Close"].iloc[-2]
-                                pct_change = (change / stock_data[stock]["price_data"]["Close"].iloc[-2]) * 100
-                                
-                                # Display with correct currency symbol based on market
-                                currency_symbol = "$" if st.session_state['market'] == 'us' else "NT$"
-                                
-                                price_color = "green" if change >= 0 else "red"
-                                st.markdown(f"**{t('current_price')}:** {currency_symbol}{current_price:.2f}")
-                                st.markdown(f"**{t('change')}:** <span style='color:{price_color}'>{change:.2f} ({pct_change:.2f}%)</span>", unsafe_allow_html=True)
-                                
-                            st.markdown("---")
-                            
-                            # Display other metrics
-                            for metric in metrics:
-                                if metric in data and data[metric] is not None:
-                                    st.markdown(f"**{metric}:** {data[metric]}")
-                
-                # TAB 3: TECHNICAL ANALYSIS
-                with tabs[2]:
-                    st.header(t('tech_analysis'))
-                    
-                    # Stock selector for technical analysis
-                    tech_stock = st.selectbox(
-                        t('select_stock'),
-                        list(stock_data.keys()),
-                        key="tech_stock_select"
-                    )
-                    
-                    if tech_stock in stock_data:
-                        df = stock_data[tech_stock]["price_data"]
-                        
-                        # Get correct currency based on selected market
-                        currency = t('currency_usd') if st.session_state['market'] == 'us' else t('currency_twd')
-                        
-                        # Create figure for price and indicators
-                        fig = make_subplots(
-                            rows=2, 
-                            cols=1, 
-                            shared_xaxes=True,
-                            vertical_spacing=0.1,
-                            row_heights=[0.7, 0.3],
-                            subplot_titles=(t('price_with_indicators').format(tech_stock), t('volume'))
-                        )
-                        
-                        # Add price candlestick
-                        fig.add_trace(
-                            go.Candlestick(
-                                x=df.index,
-                                open=df['Open'],
-                                high=df['High'],
-                                low=df['Low'],
-                                close=df['Close'],
-                                name=t('price'),
-                                increasing_line_color='green',
-                                decreasing_line_color='red'
-                            ),
-                            row=1, col=1
-                        )
-                        
-                        # Add volume
-                        fig.add_trace(
-                            go.Bar(
-                                x=df.index,
-                                y=df['Volume'],
-                                name=t('volume'),
-                                marker_color='rgba(0, 0, 255, 0.5)'
-                            ),
-                            row=2, col=1
-                        )
-                        
-                        # Add SMA
-                        if show_sma and 'SMA' in df.columns:
-                            fig.add_trace(
-                                go.Scatter(
-                                    x=df.index,
-                                    y=df['SMA'],
-                                    name=f"SMA ({sma_period})",
-                                    line=dict(color='blue', width=1)
-                                ),
-                                row=1, col=1
-                            )
-                        
-                        # Add EMA
-                        if show_ema and 'EMA' in df.columns:
-                            fig.add_trace(
-                                go.Scatter(
-                                    x=df.index,
-                                    y=df['EMA'],
-                                    name=f"EMA ({ema_period})",
-                                    line=dict(color='orange', width=1)
-                                ),
-                                row=1, col=1
-                            )
-                        
-                        # Add Bollinger Bands
-                        if show_bollinger and 'Bollinger_Upper' in df.columns:
-                            # Upper band
-                            fig.add_trace(
-                                go.Scatter(
-                                    x=df.index,
-                                    y=df['Bollinger_Upper'],
-                                    name=t('bollinger_upper'),
-                                    line=dict(color='rgba(250, 0, 0, 0.5)', width=1),
-                                    hoverinfo='none'
-                                ),
-                                row=1, col=1
-                            )
-                            
-                            # Lower band
-                            fig.add_trace(
-                                go.Scatter(
-                                    x=df.index,
-                                    y=df['Bollinger_Lower'],
-                                    name=t('bollinger_lower'),
-                                    line=dict(color='rgba(250, 0, 0, 0.5)', width=1),
-                                    fill='tonexty',
-                                    fillcolor='rgba(250, 0, 0, 0.05)',
-                                    hoverinfo='none'
-                                ),
-                                row=1, col=1
-                            )
-                        
-                        # Add RSI in a subplot
+                        # RSI Chart
                         if show_rsi and 'RSI' in df.columns:
-                            # Add RSI indicator
-                            fig.add_trace(
-                                go.Scatter(
-                                    x=df.index,
-                                    y=df['RSI'],
-                                    name=f"RSI ({rsi_period})",
-                                    line=dict(color='purple', width=1)
-                                ),
-                                row=1, col=1
-                            )
-                            
-                            # Create RSI subplot
-                            fig_rsi = make_subplots(rows=1, cols=1)
-                            
-                            # Add RSI line
-                            fig_rsi.add_trace(
-                                go.Scatter(
-                                    x=df.index,
-                                    y=df['RSI'],
-                                    name=f"RSI ({rsi_period})",
-                                    line=dict(color='purple', width=1)
+                            with indicator_cols[0]:
+                                fig_rsi = go.Figure()
+                                fig_rsi.add_trace(
+                                    go.Scatter(
+                                        x=df.index,
+                                        y=df['RSI'],
+                                        name="RSI",
+                                        line=dict(color='blue')
+                                    )
                                 )
-                            )
-                            
-                            # Add overbought line (70)
-                            fig_rsi.add_trace(
-                                go.Scatter(
-                                    x=[df.index[0], df.index[-1]],
-                                    y=[70, 70],
-                                    name=t('overbought'),
-                                    line=dict(color='red', width=1, dash='dash'),
-                                    hoverinfo='none'
+                                
+                                # Add overbought/oversold lines
+                                fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="Overbought")
+                                fig_rsi.add_hline(y=30, line_dash="dash", line_color="green", annotation_text="Oversold")
+                                
+                                fig_rsi.update_layout(
+                                    title=f"Relative Strength Index (RSI-{rsi_period})",
+                                    xaxis_title="Date",
+                                    yaxis_title="RSI",
+                                    height=400
                                 )
-                            )
-                            
-                            # Add oversold line (30)
-                            fig_rsi.add_trace(
-                                go.Scatter(
-                                    x=[df.index[0], df.index[-1]],
-                                    y=[30, 30],
-                                    name=t('oversold'),
-                                    line=dict(color='green', width=1, dash='dash'),
-                                    hoverinfo='none'
-                                )
-                            )
-                            
-                            # Update layout
-                            fig_rsi.update_layout(
-                                title=f"RSI ({rsi_period})",
-                                yaxis_title=t('rsi'),
-                                height=300,
-                                hovermode="x unified",
-                                yaxis=dict(range=[0, 100])
-                            )
-                            
-                            st.plotly_chart(fig_rsi, use_container_width=True)
+                                
+                                st.plotly_chart(fig_rsi, use_container_width=True)
                         
-                        # Add MACD in a subplot
+                        # MACD Chart
                         if show_macd and 'MACD' in df.columns:
-                            # Create MACD subplot
-                            fig_macd = make_subplots(rows=1, cols=1)
-                            
-                            # Add MACD line
-                            fig_macd.add_trace(
-                                go.Scatter(
-                                    x=df.index,
-                                    y=df['MACD'],
-                                    name=f"MACD ({macd_fast},{macd_slow},{macd_signal})",
-                                    line=dict(color='blue', width=1)
+                            with indicator_cols[1]:
+                                fig_macd = make_subplots(rows=1, cols=1)
+                                
+                                fig_macd.add_trace(
+                                    go.Scatter(
+                                        x=df.index,
+                                        y=df['MACD'],
+                                        name="MACD",
+                                        line=dict(color='blue')
+                                    )
                                 )
-                            )
-                            
-                            # Add Signal line
-                            fig_macd.add_trace(
-                                go.Scatter(
-                                    x=df.index,
-                                    y=df['MACD_Signal'],
-                                    name=t('macd_signal'),
-                                    line=dict(color='red', width=1)
+                                
+                                fig_macd.add_trace(
+                                    go.Scatter(
+                                        x=df.index,
+                                        y=df['MACD_Signal'],
+                                        name="Signal",
+                                        line=dict(color='red')
+                                    )
                                 )
-                            )
-                            
-                            # Add Histogram
-                            fig_macd.add_trace(
-                                go.Bar(
-                                    x=df.index,
-                                    y=df['MACD_Hist'],
-                                    name=t('macd_hist'),
-                                    marker_color=np.where(df['MACD_Hist'] >= 0, 'green', 'red')
+                                
+                                fig_macd.add_trace(
+                                    go.Bar(
+                                        x=df.index,
+                                        y=df['MACD_Hist'],
+                                        name="Histogram",
+                                        marker=dict(color='rgba(0, 128, 0, 0.5)')
+                                    )
                                 )
-                            )
-                            
-                            # Update layout
-                            fig_macd.update_layout(
-                                title=f"MACD ({macd_fast}, {macd_slow}, {macd_signal})",
-                                yaxis_title=t('macd'),
-                                height=300,
-                                hovermode="x unified"
-                            )
-                            
-                            st.plotly_chart(fig_macd, use_container_width=True)
-                        
-                        # Update layout for main chart
-                        fig.update_layout(
-                            title=t('price_chart').format(tech_stock),
-                            yaxis_title=t('price_currency').format(currency),
-                            xaxis_title=t('date'),
-                            height=600,
-                            hovermode="x unified",
-                            legend=dict(
-                                orientation="h",
-                                yanchor="bottom",
-                                y=1.02,
-                                xanchor="right",
-                                x=1
-                            )
-                        )
-                        
-                        st.plotly_chart(fig, use_container_width=True)
+                                
+                                fig_macd.update_layout(
+                                    title=f"MACD ({macd_fast}, {macd_slow}, {macd_signal})",
+                                    xaxis_title="Date",
+                                    yaxis_title="MACD",
+                                    height=400
+                                )
+                                
+                                st.plotly_chart(fig_macd, use_container_width=True)
+            
+            # TAB 4: RAW DATA
+            with tabs[3]:
+                st.header(t('raw_data'))
                 
-                # TAB 4: RAW DATA
-                with tabs[3]:
-                    st.header(t('raw_data'))
+                # Stock selector for raw data
+                raw_stock = st.selectbox(
+                    t('select_stock'),
+                    list(stock_data.keys()),
+                    key="raw_stock_select"
+                )
+                
+                if raw_stock in stock_data:
+                    df = stock_data[raw_stock]["price_data"]
                     
-                    # Stock selector for raw data
-                    raw_stock = st.selectbox(
-                        t('select_stock'),
-                        list(stock_data.keys()),
-                        key="raw_stock_select"
-                    )
+                    # Display the raw data
+                    st.dataframe(df.round(2))
                     
-                    if raw_stock in stock_data:
-                        df = stock_data[raw_stock]["price_data"]
-                        
-                        # Display raw data table
-                        st.dataframe(df, use_container_width=True)
-                        
-                        # Download button for CSV
-                        st.download_button(
-                            label=t('download_csv'),
-                            data=df.to_csv(),
-                            file_name=f"{raw_stock}_data.csv",
-                            mime='text/csv',
-                        )
-                    
-                    # Download button for all data
-                    st.subheader(t('download_all_data'))
-                    all_csv = all_data_df.to_csv()
+                    # Download button for CSV
+                    csv = df.to_csv().encode('utf-8')
                     st.download_button(
-                        label=t('download_all_csv'),
-                        data=all_csv,
-                        file_name="all_stock_data.csv",
+                        label=t('download').format(raw_stock),
+                        data=csv,
+                        file_name=f"{raw_stock}_stock_data.csv",
                         mime='text/csv',
                     )
-            else:
-                st.warning(t('valid_symbol'))
-        else:
-            st.warning(t('valid_symbol'))
+                
+                # Option to download all data
+                st.subheader(t('download_data'))
+                
+                all_csv = all_data_df.to_csv().encode('utf-8')
+                st.download_button(
+                    label=t('download_all'),
+                    data=all_csv,
+                    file_name="all_stock_data.csv",
+                    mime='text/csv',
+                )
     else:
-        st.info(t('enter_to_start'))
-
+        st.warning(t('valid_symbol'))
 elif st.session_state['page'] == 'predictions':
     st.header(t('predictions'))
     st.subheader(t('prediction_title'))
@@ -764,13 +706,14 @@ elif st.session_state['page'] == 'predictions':
                         st.metric(t('prediction_confidence'), f"{summary['confidence_score']:.0f}%")
                     
                     # Disclaimer
-                    st.info("⚠️ " + t('prediction_disclaimer'))
+                    st.info("⚠️ This prediction is based on historical data and should not be considered as financial advice. Always consult with a financial advisor before making investment decisions.")
                     
                 else:
                     st.error(t('prediction_error').format(result['error']))
         else:
             st.warning(t('valid_symbol'))
 
+# Portfolio Dashboard Page
 elif st.session_state['page'] == 'portfolio':
     st.header(t('portfolio_dashboard'))
     
